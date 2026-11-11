@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "Historique de navigation complet : recherche plein texte, filtres de dates, regroupements, timeline et suppression.",
   "browser_specific_settings": {
-    "gecko": { "id": "firehistory@local", "strict_min_version": "128.0" }
+    "gecko": {
+      "id": "firehistory@local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
   },
   "permissions": ["history", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],

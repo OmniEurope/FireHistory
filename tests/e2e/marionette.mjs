@@ -2,12 +2,14 @@
 // WebDriver BiDi refuses to navigate to moz-extension:// pages. Frames are `<length>:<json>`.
 import net from 'node:net';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-export async function launchFirefox({ executable, port, prefs = {} }) {
+/** `files`: { nameInProfile: sourcePath } copied into the fresh profile before start. */
+export async function launchFirefox({ executable, port, prefs = {}, files = {} }) {
   const profile = mkdtempSync(join(tmpdir(), 'firehistory-e2e-'));
+  for (const [name, src] of Object.entries(files)) copyFileSync(src, join(profile, name));
   const all = {
     'marionette.port': port,
     'browser.shell.checkDefaultBrowser': false,

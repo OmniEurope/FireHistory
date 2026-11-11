@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.log
 .web-ext-profile/
+web-ext-artifacts/

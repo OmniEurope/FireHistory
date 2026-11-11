@@ -13,7 +13,7 @@ import { escapeHtml } from '../shared/text';
 
 const ROW_H = 44;
 const OVERSCAN = 10;
-const VISIT_CONCURRENCY = 24;
+const VISIT_CONCURRENCY = 64;
 const DELETE_CONCURRENCY = 16;
 
 // ---------------------------------------------------------------- DOM
@@ -99,12 +99,27 @@ async function pool<T>(list: readonly T[], size: number, work: (item: T) => Prom
   await Promise.all(Array.from({ length: Math.min(size, list.length) }, run));
 }
 
-/** Visits of the candidate URLs, fetched only for URLs not cached yet. Returns null if superseded. */
-async function visitsFor(candidates: Entry[], gen: number): Promise<Entry[] | null> {
-  const missing = candidates.filter((e) => !visitCache.has(e.url));
+function cachedVisits(candidates: readonly Entry[]): Entry[] {
+  const out: Entry[] = [];
+  for (const e of candidates) {
+    const v = visitCache.get(e.url);
+    if (v) for (const x of v) out.push(x);
+  }
+  return out;
+}
+
+/**
+ * Visits of the candidate URLs, fetched only for URLs not cached yet. Returns null if superseded.
+ * Firefox only offers one `getVisits` call per URL, so a cold load of a large history takes seconds:
+ * URLs are fetched most recently visited first (a visit is never later than its URL's last visit,
+ * so the newest part of the list is complete first) and `onPartial` shows the list as it fills.
+ */
+async function visitsFor(candidates: Entry[], gen: number, onPartial?: (visits: Entry[]) => void): Promise<Entry[] | null> {
+  const missing = candidates.filter((e) => !visitCache.has(e.url)).sort((a, b) => b.lastVisitTime - a.lastVisitTime);
   if (missing.length) {
     progress.hidden = false;
     let last = 0;
+    let lastPartial = performance.now();
     await pool(missing, VISIT_CONCURRENCY, async (e) => {
       if (gen !== generation) return;
       try {
@@ -117,18 +132,17 @@ async function visitsFor(candidates: Entry[], gen: number): Promise<Entry[] | nu
       const now = performance.now();
       if (now - last > 100 || done === missing.length) {
         last = now;
-        progress.textContent = `Chargement des visites : ${done} / ${missing.length} pages`;
+        progress.textContent = `Chargement des visites : ${fmt(done)} / ${fmt(missing.length)} pages`;
+      }
+      if (onPartial && now - lastPartial > 1000 && done < missing.length && gen === generation) {
+        lastPartial = now;
+        onPartial(cachedVisits(candidates));
       }
     });
     progress.hidden = true;
     if (gen !== generation) return null;
   }
-  const out: Entry[] = [];
-  for (const e of candidates) {
-    const v = visitCache.get(e.url);
-    if (v) for (const x of v) out.push(x);
-  }
-  return out;
+  return cachedVisits(candidates);
 }
 
 // ---------------------------------------------------------------- filters
@@ -142,25 +156,59 @@ function dateFilter(): DateFilterInput {
   };
 }
 
+/** Single-page view (all visits of one URL), opened from a row's visit count; filters are ignored. */
+let focusUrl: string | null = null;
+const viewMode = (): ViewMode => (focusUrl ? 'visits' : prefs.mode);
+
+function openFocus(entry: Entry): void {
+  focusUrl = entry.url;
+  const page = pages.get(entry.url);
+  $('focusTitle').textContent = entry.title || page?.title || entry.url;
+  $('focusTitle').title = entry.url;
+  $('focusBar').hidden = false;
+  document.body.classList.add('focused');
+  void recompute();
+}
+
+function closeFocus(refresh = true): void {
+  if (!focusUrl) return;
+  focusUrl = null;
+  $('focusBar').hidden = true;
+  document.body.classList.remove('focused');
+  if (refresh) void recompute();
+}
+
 async function recompute(keepScroll = false): Promise<void> {
   const gen = ++generation;
-  const range = rangeFromInputs(dateFilter());
+  const range = focusUrl ? { start: null, end: null } : rangeFromInputs(dateFilter());
   const search = searchInput.value;
 
   let result: Entry[];
-  if (prefs.mode === 'urls') {
+  if (focusUrl) {
+    const visits = await visitsFor(items.filter((e) => e.url === focusUrl), gen);
+    if (visits === null) return;
+    result = visits;
+  } else if (prefs.mode === 'urls') {
     result = filterEntries(items, { search, range, content: contentOf });
   } else {
     // A visit inside the range belongs to a URL whose last visit is at or after the range start,
     // and visits share their URL's title: filter URLs on text first, fetch only their visits.
     const textOnly = filterEntries(items, { search, range: { start: null, end: null }, content: contentOf });
     const candidates = range.start === null ? textOnly : textOnly.filter((e) => e.lastVisitTime >= range.start!);
-    const visits = await visitsFor(candidates, gen);
+    let shown = false;
+    const visits = await visitsFor(candidates, gen, (partial) => {
+      show(filterEntries(partial, { search: '', range }), range, keepScroll || shown);
+      shown = true;
+    });
     if (visits === null) return;
     result = filterEntries(visits, { search: '', range });
+    keepScroll ||= shown;
   }
   if (gen !== generation) return;
+  show(result, range, keepScroll);
+}
 
+function show(result: Entry[], range: TimeRange, keepScroll: boolean): void {
   filtered = sortEntries(result, prefs.sort);
   rebuildRows(keepScroll);
   renderTimeline(buildTimeline(filtered, range));
@@ -176,15 +224,16 @@ function rebuildRows(keepScroll: boolean): void {
   if (!rows.length) {
     emptyBox.textContent = items.length ? 'Aucun résultat pour ces filtres.' : 'Historique vide.';
   }
-  const pagesCount = prefs.mode === 'visits' ? new Set(filtered.map((e) => e.url)).size : filtered.length;
-  countLabel.textContent = prefs.mode === 'visits'
-    ? `${fmt(filtered.length)} visites (${fmt(pagesCount)} pages)`
-    : `${fmt(filtered.length)} pages`;
+  const pagesCount = viewMode() === 'visits' ? new Set(filtered.map((e) => e.url)).size : filtered.length;
+  countLabel.textContent = viewMode() === 'visits'
+    ? `${plural(filtered.length, 'visite')} (${plural(pagesCount, 'page')})`
+    : plural(filtered.length, 'page');
   renderList();
   updateSelectionUi();
 }
 
 const fmt = (n: number) => n.toLocaleString('fr-FR');
+const plural = (n: number, word: string) => `${fmt(n)} ${word}${n > 1 ? 's' : ''}`;
 
 // ---------------------------------------------------------------- list rendering
 
@@ -239,7 +288,7 @@ function renderList(): void {
         + `<a class="title" href="${escapeHtml(e.url)}" target="_blank" rel="noopener" title="${escapeHtml(tip)}">${escapeHtml(title)}</a>`
         + `<button type="button" class="host" title="Filtrer sur ce site">${escapeHtml(e.host)}</button>`
         + (page?.description ? `<span class="desc">${escapeHtml(page.description)}</span>` : '<span class="desc"></span>')
-        + `<span class="visits" title="${fmt(e.visitCount)} visite${e.visitCount > 1 ? 's' : ''} au total">${fmt(e.visitCount)}</span>`
+        + `<button type="button" class="visits" title="${fmt(e.visitCount)} visite${e.visitCount > 1 ? 's' : ''} au total : voir toutes les visites de cette page">${fmt(e.visitCount)}</button>`
         + `<button type="button" class="remove" title="Supprimer cette page de l'historique" aria-label="Supprimer">✕</button>`
         + `</div>`;
     }
@@ -329,7 +378,11 @@ viewport.addEventListener('click', (ev) => {
   if (target.classList.contains('host')) {
     const q = searchInput.value.replace(/(^|\s)site:\S+/gi, '').trim();
     searchInput.value = `${q ? `${q} ` : ''}site:${r.entry.host}`;
-    void recompute();
+    onSearchChanged(0);
+    return;
+  }
+  if (target.classList.contains('visits')) {
+    openFocus(r.entry);
     return;
   }
   if (target.classList.contains('remove')) {
@@ -362,7 +415,7 @@ async function confirmDelete(urls: string[]): Promise<void> {
   if (!urls.length) return;
   const n = urls.length;
   const what = n === 1 ? 'cette page' : `ces ${fmt(n)} pages`;
-  const visitsNote = prefs.mode === 'visits'
+  const visitsNote = viewMode() === 'visits'
     ? ' Firefox ne permet pas de supprimer une visite isolée : toutes les visites de ' + what + ' seront supprimées, y compris hors des filtres.'
     : ' Toutes leurs visites seront supprimées.';
   const ok = await ask(`Supprimer ${what} de l'historique ?`, `Cette action est définitive.${visitsNote}`);
@@ -389,6 +442,7 @@ async function confirmDelete(urls: string[]): Promise<void> {
     pages.delete(u);
     selected.delete(u);
   }
+  if (focusUrl && removed.has(focusUrl)) closeFocus(false);
   await recompute(true);
   await refreshIndexInfo();
   if (failed.length) alert(`${failed.length} page(s) n'ont pas pu être supprimées.`);
@@ -402,6 +456,8 @@ document.addEventListener('keydown', (ev) => {
     selected.clear();
     renderList();
     updateSelectionUi();
+  } else if (ev.key === 'Escape' && !inField && focusUrl) {
+    closeFocus();
   } else if (ev.key === 'Delete' && !inField && selected.size) {
     ev.preventDefault();
     void confirmDelete([...selected]);
@@ -465,6 +521,7 @@ timelineBox.addEventListener('click', (ev) => {
   dateInputs.toDate.value = currentTimeline.unit === 'month' ? toDateInput(b.end) : '';
   dateInputs.fromTime.value = currentTimeline.unit === 'hour' ? toTimeInput(b.start) : '';
   dateInputs.toTime.value = currentTimeline.unit === 'hour' ? toTimeInput(b.end) : '';
+  closeFocus(false);
   void recompute();
 });
 
@@ -505,17 +562,40 @@ $('quick').addEventListener('click', (ev) => {
   if (!btn) return;
   const [from, to] = quickRange(btn.dataset.quick!);
   setDates(from, to);
+  closeFocus(false);
   void recompute();
 });
 
 // ---------------------------------------------------------------- controls
 
+const clearSearchBtn = $<HTMLButtonElement>('clearSearch');
 let searchTimer = 0;
-searchInput.addEventListener('input', () => {
+function onSearchChanged(delay: number): void {
+  clearSearchBtn.hidden = searchInput.value === '';
+  closeFocus(false);
   clearTimeout(searchTimer);
-  searchTimer = window.setTimeout(() => void recompute(), 150);
+  searchTimer = window.setTimeout(() => void recompute(), delay);
+}
+searchInput.addEventListener('input', () => onSearchChanged(150));
+searchInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && searchInput.value) {
+    ev.preventDefault();
+    searchInput.value = '';
+    onSearchChanged(0);
+  }
 });
-for (const input of Object.values(dateInputs)) input.addEventListener('change', () => void recompute());
+clearSearchBtn.addEventListener('click', () => {
+  searchInput.value = '';
+  onSearchChanged(0);
+  searchInput.focus();
+});
+$('focusClose').addEventListener('click', () => closeFocus());
+for (const input of Object.values(dateInputs)) {
+  input.addEventListener('change', () => {
+    closeFocus(false);
+    void recompute();
+  });
+}
 
 function applyPrefsToUi(): void {
   groupSelect.value = prefs.group;
@@ -536,6 +616,7 @@ function savePrefs(): void {
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-mode]')) {
   b.addEventListener('click', () => {
     prefs.mode = b.dataset.mode as ViewMode;
+    closeFocus(false);
     savePrefs();
     void recompute();
   });
@@ -558,6 +639,8 @@ $('timelineToggle').addEventListener('click', () => {
 });
 $('reset').addEventListener('click', () => {
   searchInput.value = '';
+  clearSearchBtn.hidden = true;
+  closeFocus(false);
   setDates(null, null);
   collapsed.clear();
   void recompute();

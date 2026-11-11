@@ -56,7 +56,16 @@ input[type="date"], input[type="time"], select {
   border-radius: 999px; padding: 0 16px; height: 44px; box-shadow: 0 1px 2px rgb(0 0 0 / 4%); }
 .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search svg { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
-.search input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 15px; }
+.search input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 15px; min-width: 0; }
+.clear-search { border: 0; background: none; color: var(--muted); width: 28px; height: 28px; padding: 0; border-radius: 50%; flex-shrink: 0; }
+.clear-search:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+
+.focus-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; border-radius: var(--radius);
+  background: var(--accent-soft); border: 1px solid var(--accent); }
+.focus-bar[hidden] { display: none; }
+.focus-label { color: var(--muted); flex-shrink: 0; }
+#focusTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.focused .filters { opacity: .5; }
 
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 4px 0 12px; }
 .field-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -114,7 +123,9 @@ input[type="date"], input[type="time"], select {
 .host { border: 0; background: none; padding: 0; color: var(--muted); font-size: 13px; flex-shrink: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .host:hover { color: var(--accent); text-decoration: underline; background: none !important; }
 .desc { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; opacity: .8; }
-.visits { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 28px; text-align: right; }
+.visits { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 34px; text-align: center;
+  border: 1px solid transparent; background: none; border-radius: 999px; padding: 1px 8px; }
+.visits:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft) !important; }
 .remove { border: 0; background: none; color: var(--muted); padding: 4px 6px; opacity: 0; flex-shrink: 0; }
 .row.item:hover .remove { opacity: 1; }
 .remove:hover { color: var(--danger); background: none !important; }

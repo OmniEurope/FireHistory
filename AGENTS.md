@@ -30,6 +30,10 @@ full-text search (title, URL, captured page content), multi-selection and deleti
 npm run build      # typecheck + build to dist/
 npm test           # unit tests (vitest)
 npm run e2e        # real headless Firefox check (run npm run build first)
+npm run package    # build + zip in web-ext-artifacts/
+npm run sign       # build + AMO unlisted signing (WEB_EXT_API_KEY / WEB_EXT_API_SECRET, set by the user)
+npm run lint:ext   # web-ext lint of dist/
+PLACES_DB=<copy of places.sqlite> node tests/e2e/perf.mjs   # load timings on a real history copy
 npm run preview    # dev preview at http://localhost:5178/dev/index.html (fake data)
 ```
 
@@ -39,7 +43,8 @@ pick `dist/manifest.json`.
 ## Rules
 
 - Firefox constraints to respect: no way to delete a single visit (delete a URL or a time range), no way to
-  replace `about:history`, `Ctrl+Shift+H` is reserved by Firefox.
+  replace `about:history`, `Ctrl+Shift+H` and `Ctrl+H` are taken by Firefox (an extension `Ctrl+H` registers but never fires, checked
+  on Firefox 160).
 - Performance: the list is virtualized (fixed 44 px rows); never render all rows. Visits are fetched lazily
   per URL and only for URLs that can match the current filters.
 - Privacy: private-browsing tabs are never indexed; the index stays local (IndexedDB of the extension).

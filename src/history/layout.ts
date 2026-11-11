@@ -7,8 +7,9 @@ export const LAYOUT = /* html */ `
   </div>
   <label class="search">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-    <input id="search" type="search" autocomplete="off" spellcheck="false"
+    <input id="search" type="text" role="searchbox" autocomplete="off" spellcheck="false"
       placeholder="Rechercher dans les titres, les adresses et le contenu des pages  (site:exemple.com, &quot;expression exacte&quot;)" />
+    <button type="button" id="clearSearch" class="clear-search" title="Effacer la recherche (Échap)" aria-label="Effacer la recherche" hidden>✕</button>
   </label>
 </header>
 
@@ -52,6 +53,13 @@ export const LAYOUT = /* html */ `
     <button type="button" id="timelineToggle" class="ghost" aria-pressed="true">Timeline</button>
     <button type="button" id="reset" class="ghost">Réinitialiser</button>
   </div>
+</section>
+
+<section id="focusBar" class="focus-bar" hidden>
+  <span class="focus-label">Toutes les visites de</span>
+  <strong id="focusTitle"></strong>
+  <span class="spacer"></span>
+  <button type="button" id="focusClose" class="ghost" title="Revenir à l'historique (Échap)">✕ Revenir à l'historique</button>
 </section>
 
 <section id="timeline" class="timeline" aria-label="Timeline"></section>

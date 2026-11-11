@@ -94,7 +94,31 @@ try {
   check('search on title still works', s.titles.length === 1 && s.titles[0] === 'Page Beta', JSON.stringify(s.titles));
   s = await search('site:localhost');
   check('site: filter', s.titles.length === 2, JSON.stringify(s.titles));
-  await search('');
+  await search('page beta');
+  const clearShown = await ff.exec(`return !document.getElementById('clearSearch').hidden;`);
+  await ff.exec(`document.getElementById('clearSearch').click();`);
+  await sleep(400);
+  s = await state();
+  const cleared = await ff.exec(`return { value: document.getElementById('search').value, hidden: document.getElementById('clearSearch').hidden };`);
+  check('search clear button empties the search', clearShown && cleared.value === '' && cleared.hidden && s.titles.length === 2, `${JSON.stringify(cleared)} ${s.count}`);
+
+  // Clicking a page's visit count shows only that page with all its visits.
+  await ff.exec(`
+    const row = [...document.querySelectorAll('.row.item')].find((r) => r.querySelector('.title').textContent === 'Page Alpha');
+    row.querySelector('button.visits').click();`);
+  await sleep(800);
+  s = await state();
+  const focus = await ff.exec(`return { shown: !document.getElementById('focusBar').hidden, title: document.getElementById('focusTitle').textContent };`);
+  if (process.env.E2E_SCREENSHOT) {
+    const png = await ff.send('WebDriver:TakeScreenshot', { full: false });
+    (await import('node:fs')).writeFileSync(process.env.E2E_SCREENSHOT, Buffer.from(png.value, 'base64'));
+  }
+  check('visit count opens the single-page view with all its visits',
+    focus.shown && focus.title === 'Page Alpha' && s.titles.length === 2 && s.titles.every((t) => t === 'Page Alpha'), `${JSON.stringify(focus)} ${s.count}`);
+  await ff.exec(`document.getElementById('focusClose').click();`);
+  await sleep(600);
+  s = await state();
+  check('closing the single-page view restores the list', s.titles.length === 2 && s.count === '2 pages', s.count);
 
   await ff.exec(`document.querySelector('[data-mode="visits"]').click();`);
   await sleep(800);
