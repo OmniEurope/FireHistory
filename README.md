@@ -7,7 +7,7 @@ Extension Firefox qui affiche tout l'historique de navigation dans une page comp
 - Filtre de dates : « Du » seul = la journée entière ; « Du » + « au » = la plage ; heures facultatives. Raccourcis Aujourd'hui, Hier, 7 jours, 30 jours.
 - Timeline des visites (par heure, jour ou mois selon la période) ; un clic sur une barre zoome sur cette période.
 - Recherche sur le titre, l'adresse et le contenu des pages visitées depuis l'installation (`site:exemple.com`, `"expression exacte"`). Sans contenu indexé, la recherche porte sur le titre et l'adresse.
-- Un clic sur le nombre de visites d'une page affiche cette seule page avec toutes ses visites (Échap pour revenir).
+- Un clic sur le nombre de visites d'une page affiche cette seule page avec toutes ses visites (Échap pour revenir), avec un bouton « Supprimer cette page ».
 - Croix dans la recherche (ou Échap) pour l'effacer.
 - Sélection multiple (Maj+clic pour une plage, Ctrl+A pour tout) et suppression (Suppr).
 
@@ -43,8 +43,12 @@ Sans signature, seules Firefox Developer Edition, Nightly ou ESR acceptent `xpin
 
 ## Limites de Firefox
 
-- Le premier affichage de « Chaque visite » demande un appel par page (environ 9 s pour 54 000 pages ; les visites récentes s'affichent dès la première seconde), ensuite c'est en cache.
+- Le premier affichage de « Chaque visite » demande un appel par page (environ 9 s pour un historique de 50 000 pages ; les visites récentes s'affichent dès la première seconde). Les visites sont ensuite gardées dans la base locale de l'extension : les ouvertures suivantes prennent moins d'une seconde.
 
 - Une visite isolée ne peut pas être supprimée : la suppression retire la page avec toutes ses visites.
 - `about:history` ne peut pas être remplacé par une extension.
 - Le contenu des pages n'est capturé qu'à partir de l'installation, jamais en navigation privée, et reste local.
+
+## Licence
+
+EUPL-1.2, voir [LICENSE](LICENSE).

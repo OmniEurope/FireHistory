@@ -9,3 +9,5 @@
 - 2026-11-11 : installation permanente : signature AMO en canal "unlisted" (non publique) via npm run sign
 - 2026-11-11 : cache des visites : les visites de chaque URL sont gardees en IndexedDB (store `visits`) entre deux ouvertures ; une entree n'est reutilisee que si la derniere visite et le nombre de visites de l'URL sont inchanges
 - 2026-11-11 : vue d'une page : bouton "Supprimer cette page" dans la barre de la vue, avec confirmation indiquant le nombre de visites
+- 2026-11-11 : depot : GitHub OmniEurope/FireHistory, branches `main` (defaut) et `develop` uniquement ; travail sur develop, puis tout sur main
+- 2026-11-11 : licence : EUPL-1.2 (meme texte que les paquets OmniEurope)

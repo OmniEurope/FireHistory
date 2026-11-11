@@ -2,6 +2,7 @@
   "name": "firehistory",
   "version": "0.1.0",
   "private": true,
+  "license": "EUPL-1.2",
   "description": "Firefox extension: searchable, filterable browsing history page",
   "type": "module",
   "scripts": {
