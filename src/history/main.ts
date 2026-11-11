@@ -1,6 +1,8 @@
 import './styles.css';
 import { LAYOUT } from './layout';
-import { deletePages, clearPages, getAllPages, type PageRecord } from '../shared/db';
+import {
+  clearPages, deletePages, getAllPages, getAllVisits, putVisits, type PageRecord, type VisitRecord,
+} from '../shared/db';
 import {
   formatDateTime, formatTime, rangeFromInputs, startOfDay, toDateInput, toTimeInput, type DateFilterInput, type TimeRange,
 } from '../shared/dates';
@@ -109,22 +111,67 @@ function cachedVisits(candidates: readonly Entry[]): Entry[] {
 }
 
 /**
+ * Visits saved by a previous opening of the page, loaded once on the first need. A record is used
+ * only if its URL's last visit time and visit count are unchanged; stale records are refetched.
+ */
+let persisted: Promise<Map<string, VisitRecord>> | null = null;
+function persistedVisits(): Promise<Map<string, VisitRecord>> {
+  persisted ??= getAllVisits()
+    .then((all) => new Map(all.map((r) => [r.url, r])))
+    .catch((err) => {
+      console.error('FireHistory: visit cache unavailable', err);
+      return new Map<string, VisitRecord>();
+    });
+  return persisted;
+}
+
+function fromRecord(e: Entry, r: VisitRecord): Entry[] {
+  return entriesFromVisits(e, r.ids.map((visitId, i) => ({ visitId, visitTime: r.times[i] })));
+}
+
+const PERSIST_BATCH = 2000;
+
+/**
  * Visits of the candidate URLs, fetched only for URLs not cached yet. Returns null if superseded.
  * Firefox only offers one `getVisits` call per URL, so a cold load of a large history takes seconds:
  * URLs are fetched most recently visited first (a visit is never later than its URL's last visit,
  * so the newest part of the list is complete first) and `onPartial` shows the list as it fills.
  */
 async function visitsFor(candidates: Entry[], gen: number, onPartial?: (visits: Entry[]) => void): Promise<Entry[] | null> {
-  const missing = candidates.filter((e) => !visitCache.has(e.url)).sort((a, b) => b.lastVisitTime - a.lastVisitTime);
+  let missing = candidates.filter((e) => !visitCache.has(e.url));
+  if (missing.length) {
+    const saved = await persistedVisits();
+    if (gen !== generation) return null;
+    missing = missing.filter((e) => {
+      const r = saved.get(e.url);
+      if (!r || r.lastVisitTime !== e.lastVisitTime || r.visitCount !== e.visitCount) return true;
+      visitCache.set(e.url, fromRecord(e, r));
+      return false;
+    });
+  }
+  missing.sort((a, b) => b.lastVisitTime - a.lastVisitTime);
   if (missing.length) {
     progress.hidden = false;
     let last = 0;
     let lastPartial = performance.now();
+    let toSave: VisitRecord[] = [];
+    const flush = () => {
+      const batch = toSave;
+      toSave = [];
+      void putVisits(batch).catch((err) => console.error('FireHistory: visit cache write failed', err));
+    };
     await pool(missing, VISIT_CONCURRENCY, async (e) => {
       if (gen !== generation) return;
       try {
         const visits = await browser.history.getVisits({ url: e.url });
+        const timed = visits.filter((v) => v.visitTime !== undefined);
         visitCache.set(e.url, entriesFromVisits(e, visits));
+        const record: VisitRecord = {
+          url: e.url, lastVisitTime: e.lastVisitTime, visitCount: e.visitCount,
+          ids: timed.map((v) => v.visitId), times: timed.map((v) => v.visitTime!),
+        };
+        toSave.push(record);
+        if (toSave.length >= PERSIST_BATCH) flush();
       } catch {
         visitCache.set(e.url, []);
       }
@@ -139,6 +186,7 @@ async function visitsFor(candidates: Entry[], gen: number, onPartial?: (visits: 
         onPartial(cachedVisits(candidates));
       }
     });
+    flush();
     progress.hidden = true;
     if (gen !== generation) return null;
   }
@@ -415,7 +463,9 @@ async function confirmDelete(urls: string[]): Promise<void> {
   if (!urls.length) return;
   const n = urls.length;
   const what = n === 1 ? 'cette page' : `ces ${fmt(n)} pages`;
-  const visitsNote = viewMode() === 'visits'
+  const visitsNote = focusUrl && n === 1 && urls[0] === focusUrl
+    ? ` Ses ${plural(filtered.length, 'visite')} seront supprimées.`
+    : viewMode() === 'visits'
     ? ' Firefox ne permet pas de supprimer une visite isolée : toutes les visites de ' + what + ' seront supprimées, y compris hors des filtres.'
     : ' Toutes leurs visites seront supprimées.';
   const ok = await ask(`Supprimer ${what} de l'historique ?`, `Cette action est définitive.${visitsNote}`);
@@ -590,6 +640,9 @@ clearSearchBtn.addEventListener('click', () => {
   searchInput.focus();
 });
 $('focusClose').addEventListener('click', () => closeFocus());
+$('focusDelete').addEventListener('click', () => {
+  if (focusUrl) void confirmDelete([focusUrl]);
+});
 for (const input of Object.values(dateInputs)) {
   input.addEventListener('change', () => {
     closeFocus(false);

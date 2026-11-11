@@ -59,6 +59,23 @@ try {
 
   await ff.exec(`document.querySelector('[data-mode="urls"]').click();`);
   await sleep(500);
+
+  // Second opening of the page: visits come from the extension database, not from getVisits.
+  await sleep(3000); // let the last visit-cache writes land
+  await ff.send('Marionette:SetContext', { value: 'chrome' });
+  await ff.exec(`
+    const win = Services.wm.getMostRecentWindow('navigator:browser');
+    win.gBrowser.selectedTab = win.gBrowser.addTab(arguments[0], { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });`,
+  [`moz-extension://${UUID}/src/history/index.html`]);
+  await ff.send('Marionette:SetContext', { value: 'content' });
+  const handles2 = await ff.send('WebDriver:GetWindowHandles');
+  await ff.send('WebDriver:SwitchToWindow', { handle: handles2.at(-1) });
+  await waitFor(`/\\d page/.test(document.getElementById('count')?.textContent ?? '')`);
+  await ff.exec(`document.querySelector('[data-mode="visits"]').click();`);
+  const tCached = await waitFor(`/visite/.test(document.getElementById('count').textContent) && document.getElementById('progress').hidden`);
+  console.log(`every-visit view, second opening: ${await count()} in ${tCached} ms`);
+  await ff.exec(`document.querySelector('[data-mode="urls"]').click();`);
+  await sleep(500);
 } catch (e) {
   console.log('ERROR', e.message);
 } finally {

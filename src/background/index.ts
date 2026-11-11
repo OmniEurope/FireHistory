@@ -1,4 +1,4 @@
-import { clearPages, deletePages, putPage, type PageMessage } from '../shared/db';
+import { clearPages, clearVisits, deletePages, putPage, type PageMessage } from '../shared/db';
 import { loadSettings } from '../shared/settings';
 import { normalize } from '../shared/text';
 
@@ -48,6 +48,8 @@ browser.runtime.onMessage.addListener((msg: unknown, sender: browser.runtime.Mes
 
 // Keep the content index in sync when history is deleted (here or from Firefox itself).
 browser.history.onVisitRemoved.addListener((removed) => {
-  if (removed.allHistory) void clearPages();
-  else void deletePages(removed.urls ?? []);
+  if (removed.allHistory) {
+    void clearPages();
+    void clearVisits();
+  } else void deletePages(removed.urls ?? []);
 });

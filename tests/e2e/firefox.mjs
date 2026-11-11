@@ -69,14 +69,18 @@ try {
   }
   check('Firefox recorded the visits', (await firefoxVisits(`http://localhost:${PORT}/alpha`)) === 2);
 
-  await ff.send('Marionette:SetContext', { value: 'chrome' });
-  await ff.exec(`
-    const win = Services.wm.getMostRecentWindow('navigator:browser');
-    win.gBrowser.selectedTab = win.gBrowser.addTab(arguments[0], { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });`, [HISTORY_URL]);
-  await ff.send('Marionette:SetContext', { value: 'content' });
-  const handles = await ff.send('WebDriver:GetWindowHandles');
-  await ff.send('WebDriver:SwitchToWindow', { handle: handles.at(-1) });
-  await sleep(1500);
+  /** Opens the history page in a new tab (a fresh page instance) and switches to it. */
+  const openHistoryTab = async () => {
+    await ff.send('Marionette:SetContext', { value: 'chrome' });
+    await ff.exec(`
+      const win = Services.wm.getMostRecentWindow('navigator:browser');
+      win.gBrowser.selectedTab = win.gBrowser.addTab(arguments[0], { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });`, [HISTORY_URL]);
+    await ff.send('Marionette:SetContext', { value: 'content' });
+    const handles = await ff.send('WebDriver:GetWindowHandles');
+    await ff.send('WebDriver:SwitchToWindow', { handle: handles.at(-1) });
+    await sleep(1500);
+  };
+  await openHistoryTab();
 
   let s = await state();
   check('history page lists the visited pages', s.titles.includes('Page Alpha') && s.titles.includes('Page Beta'), s.count);
@@ -125,6 +129,29 @@ try {
   s = await state();
   check('visits mode shows one row per visit', s.titles.filter((t) => t === 'Page Alpha').length === 2, s.count);
 
+  // Visits are saved in IndexedDB: a new opening of the page shows them without calling getVisits
+  // again (the "Chargement des visites" progress line is only shown while URLs are fetched).
+  const savedVisits = await ff.exec(`
+    const db = await new Promise((ok, ko) => { const r = indexedDB.open('firehistory'); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
+    const all = await new Promise((ok) => { const r = db.transaction('visits').objectStore('visits').getAll(); r.onsuccess = () => ok(r.result); });
+    db.close();
+    return all.map((r) => r.times.length).sort().join(',');`);
+  check('visits are saved in the extension database', savedVisits === '1,2', savedVisits);
+  await ff.exec(`document.querySelector('[data-mode="urls"]').click();`);
+  await sleep(400);
+  await openHistoryTab();
+  await ff.exec(`
+    window.__fetchedVisits = false;
+    const p = document.getElementById('progress');
+    new MutationObserver(() => { if (p.textContent.includes('Chargement des visites')) window.__fetchedVisits = true; })
+      .observe(p, { childList: true, characterData: true, subtree: true });
+    document.querySelector('[data-mode="visits"]').click();`);
+  await sleep(800);
+  s = await state();
+  const refetched = await ff.exec(`return window.__fetchedVisits;`);
+  check('reopened page shows the saved visits without refetching them',
+    refetched === false && s.titles.filter((t) => t === 'Page Alpha').length === 2 && s.titles.length === 3, `refetched=${refetched} ${s.count}`);
+
   await ff.exec(`const d = document.getElementById('fromDate'); d.value = '2001-01-01'; d.dispatchEvent(new Event('change'));`);
   await sleep(500);
   s = await state();
@@ -150,6 +177,22 @@ try {
   check('deleted page is gone from the list', !s.titles.includes('Page Beta') && s.titles.includes('Page Alpha'), JSON.stringify(s.titles));
   check('deleted page is gone from Firefox history', (await firefoxVisits(`http://localhost:${PORT}/beta`)) === 0);
   check('other pages are kept in Firefox history', (await firefoxVisits(`http://localhost:${PORT}/alpha`)) === 2);
+
+  // "Supprimer cette page" in the single-page view deletes the page with all its visits.
+  await ff.exec(`
+    const row = [...document.querySelectorAll('.row.item')].find((r) => r.querySelector('.title').textContent === 'Page Alpha');
+    row.querySelector('button.visits').click();`);
+  await sleep(800);
+  await ff.exec(`document.getElementById('focusDelete').click();`);
+  await sleep(300);
+  const focusDialog = await ff.exec(`return document.getElementById('confirm').open && document.getElementById('confirmText').textContent;`);
+  check('single-page delete asks for confirmation with the visit count', typeof focusDialog === 'string' && focusDialog.includes('Ses 2 visites'), String(focusDialog));
+  await ff.exec(`document.getElementById('confirmOk').click();`);
+  await sleep(1200);
+  s = await state();
+  const focusHidden = await ff.exec(`return document.getElementById('focusBar').hidden;`);
+  check('single-page delete returns to the list without the page', focusHidden && !s.titles.includes('Page Alpha'), `${focusHidden} ${JSON.stringify(s.titles)}`);
+  check('single-page delete removes the page from Firefox history', (await firefoxVisits(`http://localhost:${PORT}/alpha`)) === 0);
 } catch (err) {
   check('e2e run completed', false, err.message);
 } finally {

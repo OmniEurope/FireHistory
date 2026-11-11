@@ -59,6 +59,7 @@ export const LAYOUT = /* html */ `
   <span class="focus-label">Toutes les visites de</span>
   <strong id="focusTitle"></strong>
   <span class="spacer"></span>
+  <button type="button" id="focusDelete" class="danger" title="Supprimer cette page et toutes ses visites de l'historique">Supprimer cette page</button>
   <button type="button" id="focusClose" class="ghost" title="Revenir à l'historique (Échap)">✕ Revenir à l'historique</button>
 </section>
 
