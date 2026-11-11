@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "FireHistory",
+  "version": "0.1.0",
+  "description": "Historique de navigation complet : recherche plein texte, filtres de dates, regroupements, timeline et suppression.",
+  "browser_specific_settings": {
+    "gecko": { "id": "firehistory@local", "strict_min_version": "128.0" }
+  },
+  "permissions": ["history", "storage", "tabs"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "scripts": ["assets/background.js"],
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["assets/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "FireHistory",
+    "default_icon": "icons/icon.svg"
+  },
+  "icons": { "48": "icons/icon.svg", "96": "icons/icon.svg" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+H" },
+      "description": "Ouvrir FireHistory"
+    }
+  }
+}
