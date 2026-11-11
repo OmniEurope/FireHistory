@@ -11,3 +11,6 @@
 - 2026-11-11 : vue d'une page : bouton "Supprimer cette page" dans la barre de la vue, avec confirmation indiquant le nombre de visites
 - 2026-11-11 : depot : GitHub OmniEurope/FireHistory, branches `main` (defaut) et `develop` uniquement ; travail sur develop, puis tout sur main
 - 2026-11-11 : licence : EUPL-1.2 (meme texte que les paquets OmniEurope)
+- 2026-11-11 : page d'historique : aucun innerHTML (avertissement AMO "Unsafe assignment to innerHTML") ; squelette statique dans src/history/index.html, lignes et timeline construites avec les API DOM
+- 2026-11-11 : README en anglais ; section installation = lien vers la fiche AMO une fois publiee
+- 2026-11-11 : Android : impossible, Firefox pour Android n'expose pas l'API history aux extensions (donnees MDN browser-compat-data)

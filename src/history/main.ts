@@ -1,5 +1,4 @@
 import './styles.css';
-import { LAYOUT } from './layout';
 import {
   clearPages, deletePages, getAllPages, getAllVisits, putVisits, type PageRecord, type VisitRecord,
 } from '../shared/db';
@@ -11,7 +10,6 @@ import {
   type Entry, type GroupBy, type Row, type SortBy, type Timeline, type ViewMode,
 } from '../shared/query';
 import { ALL_URLS, loadSettings, saveSettings, type Settings } from '../shared/settings';
-import { escapeHtml } from '../shared/text';
 
 const ROW_H = 44;
 const OVERSCAN = 10;
@@ -20,7 +18,6 @@ const DELETE_CONCURRENCY = 16;
 
 // ---------------------------------------------------------------- DOM
 
-document.getElementById('app')!.innerHTML = LAYOUT;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const searchInput = $<HTMLInputElement>('search');
 const dateInputs = {
@@ -295,6 +292,17 @@ function queueRender(): void {
   });
 }
 
+/** Builds an element with properties set directly (no HTML parsing, so page data is never markup). */
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}): HTMLElementTagNameMap[K] {
+  return Object.assign(document.createElement(tag), props);
+}
+
+function svgEl(tag: string, attrs: Record<string, string | number>): SVGElement {
+  const node = document.createElementNS('http://www.w3.org/2000/svg', tag) as SVGElement;
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  return node;
+}
+
 function hue(host: string): number {
   let h = 0;
   for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) % 360;
@@ -312,38 +320,54 @@ function renderList(): void {
   const first = Math.max(0, Math.floor(top / ROW_H) - OVERSCAN);
   const last = Math.min(rows.length - 1, Math.ceil((top + viewport.clientHeight) / ROW_H) + OVERSCAN);
   const showDate = prefs.group !== 'date';
-  let html = '';
+  const out: HTMLElement[] = [];
   for (let i = first; i <= last; i++) {
     const r = rows[i]!;
-    const y = i * ROW_H;
+    const row = el('div', { className: r.kind === 'header' ? 'row header' : 'row item' });
+    row.style.transform = `translateY(${i * ROW_H}px)`;
+    row.dataset.i = String(i);
     if (r.kind === 'header') {
       const st = groupState(r.entries);
-      html += `<div class="row header${r.collapsed ? ' collapsed' : ''}" style="transform:translateY(${y}px)" data-i="${i}">`
-        + `<input type="checkbox" class="sel" data-state="${st}"${st === 'all' ? ' checked' : ''} aria-label="Sélectionner le groupe">`
-        + `<span class="chevron" aria-hidden="true"></span>`
-        + `<span class="glabel">${escapeHtml(r.label)}</span>`
-        + `<span class="gcount">${fmt(r.count)}</span></div>`;
+      row.classList.toggle('collapsed', r.collapsed);
+      const cb = el('input', { type: 'checkbox', className: 'sel', checked: st === 'all', indeterminate: st === 'some' });
+      cb.setAttribute('aria-label', 'Sélectionner le groupe');
+      const chevron = el('span', { className: 'chevron' });
+      chevron.setAttribute('aria-hidden', 'true');
+      row.append(cb, chevron, el('span', { className: 'glabel', textContent: r.label }), el('span', { className: 'gcount', textContent: fmt(r.count) }));
     } else {
       const e = r.entry;
       const sel = selected.has(e.url);
       const page = pages.get(e.url);
       const title = e.title || page?.title || e.url;
-      const tip = [title, e.url, page?.description].filter(Boolean).join('\n');
-      html += `<div class="row item${sel ? ' selected' : ''}" style="transform:translateY(${y}px)" data-i="${i}">`
-        + `<input type="checkbox" class="sel"${sel ? ' checked' : ''} aria-label="Sélectionner">`
-        + `<span class="time">${showDate ? formatDateTime(e.time) : formatTime(e.time)}</span>`
-        + `<span class="badge" style="--h:${hue(e.host)}">${escapeHtml((e.host || '?').charAt(0).toUpperCase())}</span>`
-        + `<a class="title" href="${escapeHtml(e.url)}" target="_blank" rel="noopener" title="${escapeHtml(tip)}">${escapeHtml(title)}</a>`
-        + `<button type="button" class="host" title="Filtrer sur ce site">${escapeHtml(e.host)}</button>`
-        + (page?.description ? `<span class="desc">${escapeHtml(page.description)}</span>` : '<span class="desc"></span>')
-        + `<button type="button" class="visits" title="${fmt(e.visitCount)} visite${e.visitCount > 1 ? 's' : ''} au total : voir toutes les visites de cette page">${fmt(e.visitCount)}</button>`
-        + `<button type="button" class="remove" title="Supprimer cette page de l'historique" aria-label="Supprimer">✕</button>`
-        + `</div>`;
+      row.classList.toggle('selected', sel);
+      const cb = el('input', { type: 'checkbox', className: 'sel', checked: sel });
+      cb.setAttribute('aria-label', 'Sélectionner');
+      const badge = el('span', { className: 'badge', textContent: (e.host || '?').charAt(0).toUpperCase() });
+      badge.style.setProperty('--h', String(hue(e.host)));
+      const link = el('a', {
+        className: 'title', href: e.url, target: '_blank', rel: 'noopener', textContent: title,
+        title: [title, e.url, page?.description].filter(Boolean).join('\n'),
+      });
+      const remove = el('button', { type: 'button', className: 'remove', title: "Supprimer cette page de l'historique", textContent: '✕' });
+      remove.setAttribute('aria-label', 'Supprimer');
+      row.append(
+        cb,
+        el('span', { className: 'time', textContent: showDate ? formatDateTime(e.time) : formatTime(e.time) }),
+        badge,
+        link,
+        el('button', { type: 'button', className: 'host', title: 'Filtrer sur ce site', textContent: e.host }),
+        el('span', { className: 'desc', textContent: page?.description ?? '' }),
+        el('button', {
+          type: 'button', className: 'visits', textContent: fmt(e.visitCount),
+          title: `${fmt(e.visitCount)} visite${e.visitCount > 1 ? 's' : ''} au total : voir toutes les visites de cette page`,
+        }),
+        remove,
+      );
     }
+    out.push(row);
   }
   // Rows live inside the spacer, which carries the full scroll height.
-  spacer.innerHTML = html;
-  for (const cb of spacer.querySelectorAll<HTMLInputElement>('input[data-state="some"]')) cb.indeterminate = true;
+  spacer.replaceChildren(...out);
 }
 
 viewport.addEventListener('scroll', queueRender, { passive: true });
@@ -539,7 +563,7 @@ function renderTimeline(t: Timeline): void {
   timelineBox.hidden = false;
   const n = t.buckets.length;
   if (!n || t.max === 0) {
-    timelineBox.innerHTML = '<div class="tl-empty">Aucune visite sur la période.</div>';
+    timelineBox.replaceChildren(el('div', { className: 'tl-empty', textContent: 'Aucune visite sur la période.' }));
     return;
   }
   const W = 1000;
@@ -547,18 +571,24 @@ function renderTimeline(t: Timeline): void {
   const bw = W / n;
   const gap = Math.min(2, bw * 0.2);
   const fmtB = bucketFormat[t.unit];
-  let bars = '';
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': 'Timeline des visites' });
   t.buckets.forEach((b, i) => {
     const h = b.count ? Math.max(2, (b.count / t.max) * (H - 4)) : 0;
-    bars += `<g data-b="${i}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${H}"/>`
-      + (h ? `<rect class="bar" x="${i * bw + gap / 2}" y="${H - h}" width="${Math.max(0.5, bw - gap)}" height="${h}" rx="1"/>` : '')
-      + `<title>${escapeHtml(fmtB.format(b.start))} : ${fmt(b.count)}</title></g>`;
+    const g = svgEl('g', { 'data-b': i });
+    g.append(svgEl('rect', { class: 'hit', x: i * bw, y: 0, width: bw, height: H }));
+    if (h) g.append(svgEl('rect', { class: 'bar', x: i * bw + gap / 2, y: H - h, width: Math.max(0.5, bw - gap), height: h, rx: 1 }));
+    const tip = svgEl('title', {});
+    tip.textContent = `${fmtB.format(b.start)} : ${fmt(b.count)}`;
+    g.append(tip);
+    svg.append(g);
   });
   const labelIdx = [...new Set([0, Math.floor((n - 1) / 2), n - 1])];
   const unitName = { hour: 'par heure', day: 'par jour', month: 'par mois' }[t.unit];
-  timelineBox.innerHTML = `<div class="tl-head"><span>Visites ${unitName}</span><span>max ${fmt(t.max)}</span></div>`
-    + `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Timeline des visites">${bars}</svg>`
-    + `<div class="tl-axis">${labelIdx.map((i) => `<span>${escapeHtml(fmtB.format(t.buckets[i]!.start))}</span>`).join('')}</div>`;
+  const head = el('div', { className: 'tl-head' });
+  head.append(el('span', { textContent: `Visites ${unitName}` }), el('span', { textContent: `max ${fmt(t.max)}` }));
+  const axis = el('div', { className: 'tl-axis' });
+  axis.append(...labelIdx.map((i) => el('span', { textContent: fmtB.format(t.buckets[i]!.start) })));
+  timelineBox.replaceChildren(head, svg, axis);
 }
 
 timelineBox.addEventListener('click', (ev) => {

@@ -18,7 +18,7 @@ full-text search (title, URL, captured page content), multi-selection and deleti
 - `src/background/index.ts`: action button, content capture to IndexedDB, index cleanup on history deletion.
 - `src/content/index.ts`: captures title, meta description and main text. Must stay import-free (content
   scripts cannot be ES modules).
-- `src/history/`: the history page (`main.ts` state and virtualized list, `layout.ts` markup, `styles.css`).
+- `src/history/`: the history page (`index.html` static markup, `main.ts` state and virtualized list built with DOM APIs, never `innerHTML`, `styles.css`).
 - `src/shared/`: pure logic (`dates.ts`, `query.ts`, `text.ts`), IndexedDB store (`db.ts`), settings.
 - `dev/`: dev-only preview with a FAKE `browser` API (`mock-browser.ts`). Never shipped, never a proof of
   Firefox behavior.

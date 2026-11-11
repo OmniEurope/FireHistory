@@ -1,54 +1,47 @@
 # FireHistory
 
-Extension Firefox qui affiche tout l'historique de navigation dans une page complète.
+Firefox extension that shows your whole browsing history in a full-tab page.
 
-- Liste par date (Aujourd'hui, Hier, puis jour par jour), ou regroupée par site, par nombre de visites, ou sans regroupement.
-- Affichage « Dernière visite » (une ligne par page) ou « Chaque visite » (une ligne par visite).
-- Filtre de dates : « Du » seul = la journée entière ; « Du » + « au » = la plage ; heures facultatives. Raccourcis Aujourd'hui, Hier, 7 jours, 30 jours.
-- Timeline des visites (par heure, jour ou mois selon la période) ; un clic sur une barre zoome sur cette période.
-- Recherche sur le titre, l'adresse et le contenu des pages visitées depuis l'installation (`site:exemple.com`, `"expression exacte"`). Sans contenu indexé, la recherche porte sur le titre et l'adresse.
-- Un clic sur le nombre de visites d'une page affiche cette seule page avec toutes ses visites (Échap pour revenir), avec un bouton « Supprimer cette page ».
-- Croix dans la recherche (ou Échap) pour l'effacer.
-- Sélection multiple (Maj+clic pour une plage, Ctrl+A pour tout) et suppression (Suppr).
+- List by date (Today, Yesterday, then day by day), or grouped by site, by visit count, or ungrouped.
+- "Last visit" view (one row per page) or "Every visit" view (one row per visit).
+- Date filter: "From" alone means that whole day; "From" + "to" means the range; times are optional. Shortcuts for Today, Yesterday, 7 days, 30 days.
+- Visit timeline (per hour, day or month depending on the period); clicking a bar zooms into that period.
+- Search in titles, addresses and the content of pages visited since installation (`site:example.com`, `"exact phrase"`). Pages without indexed content are matched on title and address.
+- Clicking a page's visit count shows that page alone with all its visits (Esc to go back), with a "Delete this page" button.
+- Clear button in the search field (or Esc).
+- Multi-selection (Shift+click for a range, Ctrl+A for all) and deletion (Del).
 
-## Installation (développement)
+The interface is in French.
+
+## Install
+
+FireHistory is being published on addons.mozilla.org; the link will be added here once it is live.
+
+## Development
 
 ```bash
 npm install
-npm run build
+npm run build      # typecheck + build to dist/
+npm test           # unit tests (vitest)
+npm run e2e        # real headless Firefox check (after npm run build)
+npm run package    # build + zip in web-ext-artifacts/
+npm run preview    # dev preview at http://localhost:5178/dev/index.html (fake data)
 ```
 
-Puis dans Firefox : `about:debugging#/runtime/this-firefox`, « Charger un module complémentaire temporaire », choisir `dist/manifest.json`. Ouvrir avec le bouton de la barre d'outils ou `Alt+Shift+H`.
+To load the build in Firefox: `about:debugging#/runtime/this-firefox`, "Load Temporary Add-on", pick `dist/manifest.json`. Open it with the toolbar button or `Alt+Shift+H`.
 
-## Installation permanente
+## Shortcut
 
-Firefox (version normale) n'accepte que les extensions signées par Mozilla. La signature se fait en canal « unlisted » : l'extension n'est **pas publiée** sur le site des modules, Mozilla la signe automatiquement et rend un fichier `.xpi` installable définitivement.
+`Alt+Shift+H` by default, configurable in `about:addons`, gear menu, "Manage Extension Shortcuts". `Ctrl+H` cannot be used: Firefox keeps it and opens its own history sidebar (checked on Firefox 160).
 
-1. Créer des clés d'API sur https://addons.mozilla.org/developers/addon/api/key/ (compte Mozilla).
-2. Lancer, avec les clés dans l'environnement :
+## Firefox limits
 
-   ```bash
-   WEB_EXT_API_KEY=... WEB_EXT_API_SECRET=... npm run sign
-   ```
-
-3. Ouvrir le `.xpi` produit dans `web-ext-artifacts/` avec Firefox (glisser-déposer) et accepter l'installation.
-
-Nouvelle version : augmenter `version` dans `public/manifest.json`, puis relancer `npm run sign`. L'identifiant `firehistory@local` ne change pas, l'index du contenu est donc conservé.
-
-Sans signature, seules Firefox Developer Edition, Nightly ou ESR acceptent `xpinstall.signatures.required = false`.
-
-## Raccourci
-
-`Alt+Shift+H` par défaut, modifiable dans `about:addons`, roue dentée, « Gérer les raccourcis d'extensions ». `Ctrl+H` ne fonctionne pas : Firefox garde la priorité et ouvre son panneau d'historique (vérifié sur Firefox 160).
-
-## Limites de Firefox
-
-- Le premier affichage de « Chaque visite » demande un appel par page (environ 9 s pour un historique de 50 000 pages ; les visites récentes s'affichent dès la première seconde). Les visites sont ensuite gardées dans la base locale de l'extension : les ouvertures suivantes prennent moins d'une seconde.
-
-- Une visite isolée ne peut pas être supprimée : la suppression retire la page avec toutes ses visites.
-- `about:history` ne peut pas être remplacé par une extension.
-- Le contenu des pages n'est capturé qu'à partir de l'installation, jamais en navigation privée, et reste local.
+- The first "Every visit" display needs one call per page (about 9 s for a 50,000-page history; recent visits show up within the first second). Visits are then kept in the extension's local database, so later openings take under a second.
+- A single visit cannot be deleted: deleting removes the page with all its visits.
+- An extension cannot replace `about:history`.
+- Page content is captured only from installation onwards, never in private browsing, and stays on your computer.
+- Firefox for Android does not provide the `history` API to extensions, so FireHistory is desktop only.
 
 ## Licence
 
-EUPL-1.2, voir [LICENSE](LICENSE).
+EUPL-1.2, see [LICENSE](LICENSE).
